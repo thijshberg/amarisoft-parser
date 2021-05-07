@@ -184,3 +184,15 @@ def single_session_parser(file):
                     data,ue_id = r
                     res.append(data)
     return res
+
+
+def parse_pgw(pgw):
+    pgw_dat = []
+    for x in pgw:
+        if 'quic' in x['_source']['layers']:#QUIC is transported over UDP so do this first
+            pgw_dat.append((float(tree_traverse(x,'frame.time_epoch')[0]),int(_get(tree_traverse(x,'quic.length'),0,0))))
+        elif 'udp' in x['_source']['layers']:
+            pgw_dat.append((float(tree_traverse(x,'frame.time_epoch')[0]),int(_get(tree_traverse(x,'data.len'),0,0))))
+        elif 'tcp' in x['_source']['layers']:
+            pgw_dat.append((float(tree_traverse(x,'frame.time_epoch')[0]),len(_get(tree_traverse(x,'tcp.payload'),0,[]))//3+1,_get(tree_traverse(x,'tls.app_data_proto'),0,'')))
+    return np.array([list(x[:2]) for x in pgw_dat])
