@@ -1,5 +1,7 @@
 import re
 import datetime
+from parsing_util import tree_traverse
+import numpy as np
 
 DAY = 24*3600
 DEBUG= False
@@ -195,4 +197,4 @@ def parse_pgw(pgw):
             pgw_dat.append((float(tree_traverse(x,'frame.time_epoch')[0]),int(_get(tree_traverse(x,'data.len'),0,0))))
         elif 'tcp' in x['_source']['layers']:
             pgw_dat.append((float(tree_traverse(x,'frame.time_epoch')[0]),len(_get(tree_traverse(x,'tcp.payload'),0,[]))//3+1,_get(tree_traverse(x,'tls.app_data_proto'),0,'')))
-    return np.array([list(x[:2]) for x in pgw_dat])
+    return [list(x[:2]) for x in pgw_dat]
