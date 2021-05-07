@@ -3,27 +3,19 @@ import datetime
 
 DAY = 24*3600
 DEBUG= False
-def parse_amari_log(filename):
-    res = []
-    with open(filename,'r') as f:
-        for line in f:
-            if line[0]=='#':
-                continue
-            elif line[0].isnumeric() and'[MAC]' in line:
-                if (data,_ := parse_mac_line(line)) is not None:
-                    res.append(data)
-    return res
 
 lcid_pattern = re.compile("LCID:[0-9][0-9]?")
+
 def parse_mac_line(line):
+    """
+    Parses a line containing MAC data from the amarisoft log. It is up to the user to check whether there is a MAC line there.
+    """
     splitted = line.split()
     timestamp = ''
     direction = 0
     length = 0
     try:
         timestamp = datetime.time.fromisoformat(splitted[0])
-        #if not (a[3] in CELL_ID and a[4] in UE_ID):
-        #    return None
         if not (direction:= splitted[2]) in ['UL','DL']:
             return None
         for a,b in pairwise(splitted[5:]):
@@ -79,6 +71,9 @@ def base16caster(s):
         raise CastError(chopped)
 
 def peeker(keyword,caster=int,limit=15):
+    """
+    Checks forward through the file to find the given keyword. Bails out if there is a MAC line or the limit is reached.
+    """
     def line_peeker(lines):
         for l,i in zip(lines,range(limit)):
             if 'MAC' in l:
@@ -97,7 +92,11 @@ tmsi_peeker_long = peeker('M-TMSI',caster=base16caster)
 class CastError(Exception):
     pass
 
-def separate_sessions_tmsi(*files,nr=False,peek_limit=120):
+def separate_sessions_tmsi(*files,nr=False,peek_limit=120) -> dict:
+    """
+    This parses the given files, and gives the user data lengths for the different TMSI's.
+    The result is a dict with TMSI's for keys and lists of lists of user data for each UE ID connected via this TMSI. 
+    """
     res = {}
     id_mapping = {}
     dat = {}
@@ -172,6 +171,10 @@ def separate_sessions_tmsi(*files,nr=False,peek_limit=120):
     return res
 
 def single_session_parser(file):
+    """
+    Used for parsing amarisoft log files with one phone connected. 
+    It just reads all the user data lengths for all packets so if there are multiple users or sessions in the file they will all be parsed together.
+    """
     res = []
     with open(file,'r') as f:
         fiter = iter(f)#we work with a specific iterator so we can go through it in functions we call
