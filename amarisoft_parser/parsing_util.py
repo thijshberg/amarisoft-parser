@@ -5,6 +5,7 @@ from json import JSONDecoder
 import numpy as np
 import pandas as pd
 import random
+from functools import reduce
 
 def tree_traverse(full_tree,target_string):
     def traverse_step(tree):
@@ -116,3 +117,19 @@ def parse_object_pairs(pairs):
     return dct
 
 decoder = JSONDecoder(object_pairs_hook=parse_object_pairs)
+
+
+def pairwise(iterable):
+    a = iter(iterable)
+    b = iter(iterable)
+    next(b)
+    while True:
+        try:
+            yield next(a),next(b)
+        except StopIteration:
+            return
+
+
+def flatten(data):
+    return reduce(list.__add__,data,[])
+

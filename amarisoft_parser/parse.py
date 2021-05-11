@@ -1,6 +1,6 @@
 import re
 import datetime
-from parsing_util import tree_traverse
+from .parsing_util import tree_traverse,_get,pairwise
 import numpy as np
 
 DAY = 24*3600
@@ -40,9 +40,24 @@ def diff_time(a:datetime.time,b:datetime.time):
 
 def normalize_times(data):
     t0 = data[0][0]
-    data = [[diff_time(d[0],t0),d[1:]] for d in data]
+    data = [[diff_time(d[0],t0),*d[1:]] for d in data]
     return data
 
+def normalize_pgw(pgw):
+    if not pgw:
+        return pgw
+    offset = pgw[0][0]
+    return [[x[0]-offset,*x[1:]] for x in pgw]
+
+def normalize_series(series):
+    if not series:
+        return []
+    if isinstance(series[0][0],datetime.time):
+        return normalize_times(series)
+    elif isinstance(series[0][0], float) or isinstance(series[0][0], np.float64):
+        return normalize_pgw(series)
+    else:
+        raise Exception("Is this a timeseries?")
 
 def debug(*args):
     if DEBUG:
@@ -134,7 +149,7 @@ def separate_sessions_tmsi(*files,nr=False,peek_limit=120) -> dict:
         dat[int(ue_id,16)] = []
         debug("registering",int(ue_id,16),tmsi)
     def finish_session(ue_id,pop=True):
-        res[id_mapping[ue_id]].append(dat[ue_id])
+        res[id_mapping[ue_id]] += dat[ue_id]
         if pop:
             dat.pop(ue_id)
             id_mapping.pop(ue_id)
@@ -171,7 +186,11 @@ def separate_sessions_tmsi(*files,nr=False,peek_limit=120) -> dict:
             finish_session(ue_id,pop=False)
             debug("final release", ue_id)
     return res
-
+    
+def flatten(data):
+    for key,item in data.items():
+        data[key] = reduce(list.__add__,item,[])
+    return data
 def single_session_parser(file):
     """
     Used for parsing amarisoft log files with one phone connected. 
