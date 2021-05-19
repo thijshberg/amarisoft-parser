@@ -218,3 +218,112 @@ def parse_pgw(pgw):
         elif 'tcp' in x['_source']['layers']:
             pgw_dat.append((float(tree_traverse(x,'frame.time_epoch')[0]),len(_get(tree_traverse(x,'tcp.payload'),0,[]))//3+1,_get(tree_traverse(x,'tls.app_data_proto'),0,'')))
     return [list(x[:2]) for x in pgw_dat]
+
+
+def synchronize_times(series: dict):
+    """
+    If you have a couple of timeseries this will synchronize them, with the earliest one starting at 0.
+    """
+    series = {key:item for key,item in series.items() if item}
+    is_epoch = {key:isinstance(s[0][0],float) for key,s in series.items() if s}
+    starts = {s[0]:datetime.datetime.fromtimestamp(s[1][0][0]).time() if e[1] else s[1][0][0] for s,e in zip(series.items(),is_epoch.items())}
+    debug('Starting times:',starts)
+    earliest = min(starts.items(),key=lambda x: diff_time(x[1], datetime.time(0,0,0)))
+    debug(earliest)
+    res = {}
+    for i,s in series.items():
+        offset = 0
+        last_time = datetime.time(0,0,0,0)
+        if is_epoch[i]:
+            tmp = [] 
+            for x in s:
+                t= datetime.datetime.fromtimestamp(x[0]).time()
+                if diff_time(t, last_time) < 0:
+                    offset += DAY
+                last_time = t
+                tmp.append([diff_time(t,earliest[1])+offset,x[-1]])
+            res[i] = tmp
+        else:
+            tmp = []
+            for x in s:
+                t= x[0]
+                if diff_time(t, last_time) < 0:
+                    offset += DAY
+                last_time = t
+                tmp.append([diff_time(t,earliest[1])+offset,x[-1]])
+            res[i] = tmp
+    return res
+
+
+def separate_times(data:dict,primary_key) -> dict:
+    """
+    This will, given a synchronized and homogenized dictionary of timeseries with a designated main timeseries, transform it into a dictionary timeseries with two data fields.
+    These data fields corresponds to the primary timeseries data and to the smaller timeseries that ran alongside it.
+
+    Timeseries must have the same time resolution as the lists are just zipped.
+
+
+    -----------------------------------------------------------------------------------------------
+    ------------------- -----------------------------------        --------------------------------
+
+    ->
+
+    |-----------------| |---------------------------------|        |-------------------------------|
+    |-----------------| |---------------------------------|        |-------------------------------|
+
+    """
+    res = {}
+    for key,item in filter(lambda x: x[0]!= primary_key and x[1], data.items()):
+        start = item[0][0]
+        res[key] = list(map(lambda x: x[0] + [x[1][1]],zip(item, filter(lambda y: y[0] >= start, data[primary_key]))))
+    return res
+
+
+def fast_activity_graph(data,resolution):
+    """
+    Transforms a time series into an activity graph. It's "fast" because it is faster than the first attempt.
+    It uses an numpy arange which will construct the array in memory. If you call this with exorbitant bounds (e.g. mixing epoch times with absolute times) it will eat all your memory.
+    """
+    res = []
+    active = []
+    index = 0
+    l = len(data)-1
+    if not data:
+        return []
+    for i in np.arange(data[0][0],data[-1][0],resolution):
+        while (x:= data[index])[0] < i +resolution:
+            active.append(x)
+            if index >= l:
+                break
+            index +=1 
+        while active and active[0][0] < i -resolution:
+            active.pop(0)
+        res.append([i,sum(x[1] for x in active)/max(len(active),1)])
+    return res
+
+def cumulative_dict(data,primary_key,resolution=0.01):
+    """
+    Transforms a dictionary of timeseries into dictionary of cumulative data-througput timeseries. Cuts up the timeseries like separate_times.
+    """
+    def _cumulative(it):
+        it_iter = iter(it)
+        primary_iter = filter(lambda x: it[0][0] <= x[0] <= it[-1][0],data[primary_key])
+        res = []
+        total = 0
+        total_primary =0
+        done = False
+        for i in filter(lambda _ : not done, np.arange(it[0][0],it[-1][0],resolution)):
+            try:
+                while (x:=next(it_iter))[0] < i:
+                    total += x[1]
+            except StopIteration:
+                done = True
+            try:
+                while (x:=next(primary_iter))[0] < i:
+                    total_primary += x[1]
+            except StopIteration:
+                done = True
+            res.append([i,total,total_primary])
+        return res
+
+    return {key:_cumulative(item) for key,item in filter(lambda x: x[0] != primary_key,data.items())}
