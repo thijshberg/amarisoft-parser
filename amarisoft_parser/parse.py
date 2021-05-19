@@ -6,7 +6,8 @@ import numpy as np
 DAY = 24*3600
 DEBUG= False
 
-lcid_pattern = re.compile("LCID:[0-9][0-9]?")
+lcid_pattern = re.compile("LCID:[3,4]?")
+lcid_pattern1 = re.compile("LCID:[0-9][0-9]?")
 
 def parse_mac_line(line):
     """
